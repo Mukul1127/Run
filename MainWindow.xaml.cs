@@ -28,7 +28,7 @@ namespace Run
 
         public MainWindow()
         {
-            this.InitializeComponent();
+            InitializeComponent();
             hwnd = WindowNative.GetWindowHandle(this);
 
             // Get display height
@@ -38,12 +38,10 @@ namespace Run
             // Position from BOTTOM LEFT corner
             this.Move(XOffset, screenHeight - YOffset - 216);
 
-            // Set properties
             this.SetIcon("Assets/Logo.ico");
-            this.SetIsAlwaysOnTop(true);
-            this.SetIsResizable(false);
-            this.SetIsMinimizable(false);
-            this.SetIsMaximizable(false);
+
+            // Fix being able to double click titlebar to maximize even when disabled
+            NativeWindowHelper.ForceDisableMaximize(this);
 
             // Add listeners to TextBoxRun
             KeyboardAccelerator enter = new()
