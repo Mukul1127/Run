@@ -10,70 +10,65 @@ using WinRT.Interop;
 using Microsoft.UI.Xaml.Controls;
 using Windows.System;
 using Microsoft.UI.Xaml.Input;
-using System.Threading;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Windows.Input;
+using WinUIEx;
 
 namespace Run
 {
-    public sealed partial class MainWindow : Window
+    public sealed partial class MainWindow : WinUIEx.WindowEx
     {
         // Window Properties
-        public const int X = 10;
-        public const int Y = 10;
-        public const int W = 416;
-        public const int H = 216;
+        public const int XOffset = 10;
+        public const int YOffset = 10;
 
         private readonly nint hwnd;
-        private readonly Regex environmentVariableRegex = new(@"%(\w+)%|\$Env:(\w+)");
+        private static readonly Regex environmentVariableRegex = new(@"%(\w+)%|\$Env:(\w+)");
+        private static readonly string[] ExecutableExtensions = { ".exe", ".com", ".pif", ".bat", ".cmd", ".ps1", ".msc" };
 
         public MainWindow()
         {
             this.InitializeComponent();
-            this.hwnd = WindowNative.GetWindowHandle(this);
-            AppWindow appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(this.hwnd));
-            if (appWindow == null)
-            {
-                throw new Exception("Unable to customize window: Failed to get window");
-            }
+            hwnd = WindowNative.GetWindowHandle(this);
 
             // Get display height
-            var displayArea = DisplayArea.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(this.hwnd), DisplayAreaFallback.Nearest);
+            var displayArea = DisplayArea.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(hwnd), DisplayAreaFallback.Nearest);
             int screenHeight = (int)displayArea.WorkArea.Height;
 
             // Position from BOTTOM LEFT corner
-            appWindow.MoveAndResize(new Windows.Graphics.RectInt32(X, screenHeight - Y - H, W, H));
+            this.Move(XOffset, screenHeight - YOffset - 216);
 
-            // Set icon
-            appWindow.SetIcon("Assets/Logo.ico");
+            // Set properties
+            this.SetIcon("Assets/Logo.ico");
+            this.SetIsAlwaysOnTop(true);
+            this.SetIsResizable(false);
+            this.SetIsMinimizable(false);
+            this.SetIsMaximizable(false);
 
-            // Disable resizing and remove maximize and minimize buttons
-            if (appWindow.Presenter is OverlappedPresenter presenter)
+            // Add listeners to TextBoxRun
+            KeyboardAccelerator enter = new()
             {
-                presenter.IsResizable = false;
-                presenter.IsMinimizable = false;
-                presenter.IsMaximizable = false;
-            }
-
-            // Add listeners to txtRunCommand
-            KeyboardAccelerator ctrlShiftEnter = new KeyboardAccelerator();
-            ctrlShiftEnter.Key = VirtualKey.Enter;
-            ctrlShiftEnter.Modifiers = VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift;
-            ctrlShiftEnter.Invoked += CtrlShiftEnter_Invoked;
-            txtRunCommand.KeyboardAccelerators.Add(ctrlShiftEnter);
-            KeyboardAccelerator enter = new KeyboardAccelerator();
-            enter.Key = VirtualKey.Enter;
+                Key = VirtualKey.Enter
+            };
             enter.Invoked += Enter_Invoked;
-            txtRunCommand.KeyboardAccelerators.Add(enter);
+            TextBoxRun.KeyboardAccelerators.Add(enter);
+
+            KeyboardAccelerator ctrlShiftEnter = new()
+            {
+                Key = VirtualKey.Enter,
+                Modifiers = VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift
+            };
+            ctrlShiftEnter.Invoked += CtrlShiftEnter_Invoked;
+            TextBoxRun.KeyboardAccelerators.Add(ctrlShiftEnter);
         }
 
-        private void TxtRunCommand_Loaded(object sender, RoutedEventArgs e)
+        // TextBoxRun
+        private void TextBoxRun_Loaded(object sender, RoutedEventArgs e)
         {
-            txtRunCommand.Focus(FocusState.Programmatic);
+            TextBoxRun.Focus(FocusState.Programmatic);
         }
 
-        private void TxtRunCommand_KeyDown(object sender, KeyRoutedEventArgs e)
+        private void TextBoxRun_KeyDown(object sender, KeyRoutedEventArgs e)
         {
             if (e.Key == VirtualKey.Escape)
             {
@@ -81,52 +76,56 @@ namespace Run
             }
         }
 
-        private void TxtRunCommand_TextChanged(object sender, RoutedEventArgs e)
+        private void TextBoxRun_TextChanged(object sender, RoutedEventArgs e)
         {
-            this.btnOk.IsEnabled = !String.IsNullOrWhiteSpace(txtRunCommand.Text);
+            this.ButtonOk.IsEnabled = !String.IsNullOrWhiteSpace(TextBoxRun.Text);
         }
 
         private void Enter_Invoked(object sender, KeyboardAcceleratorInvokedEventArgs args)
         {
-            RunCommand(txtRunCommand.Text.Trim().Split(" "));
+            RunCommand(TextBoxRun.Text.Trim().Split(" "));
             args.Handled = true;
         }
 
         private void CtrlShiftEnter_Invoked(object sender, KeyboardAcceleratorInvokedEventArgs args)
         {
-            RunCommand(txtRunCommand.Text.Trim().Split(" "), true);
+            RunCommand(TextBoxRun.Text.Trim().Split(" "), true);
             args.Handled = true;
         }
 
-        private void BtnOk_Click(object sender, RoutedEventArgs e)
+        // ButtonOk
+        private void ButtonOk_Click(object sender, RoutedEventArgs e)
         {
-            string[] command = txtRunCommand.Text.Trim().Split(" ");
+            string[] command = TextBoxRun.Text.Trim().Split(" ");
             RunCommand(command);
         }
 
-        private void BtnCancel_Click(object sender, RoutedEventArgs e)
+        // Button Cancel
+        private void ButtonCancel_Click(object sender, RoutedEventArgs e)
         {
             Close();
         }
 
-        private async void BtnBrowse_Click(object sender, RoutedEventArgs e)
+        // ButtonBrowse
+        private async void ButtonBrowse_Click(object sender, RoutedEventArgs e)
         {
             FileOpenPicker picker = new();
             picker.FileTypeFilter.Add("*");
 
-            InitializeWithWindow.Initialize(picker, this.hwnd);
+            InitializeWithWindow.Initialize(picker, hwnd);
 
             StorageFile file = await picker.PickSingleFileAsync();
             if (file != null)
             {
-                txtRunCommand.Text = file.Path;
+                TextBoxRun.Text = file.Path;
             }
         }
 
+        // Helpers
         private async void ShowErrorDialog(string message)
         {
-            // TODO: Remove
-            ContentDialog errorDialog = new ContentDialog
+            // TODO: Replace with better solution
+            ContentDialog errorDialog = new()
             {
                 Title = "Error",
                 Content = message,
@@ -146,10 +145,13 @@ namespace Run
 
             string commandString = ExpandEnvironmentVariables(String.Join(" ", command));
 
-            if (Directory.Exists(commandString) || File.Exists(commandString) || Uri.IsWellFormedUriString(commandString, UriKind.Absolute))
+            if (!ExecutableExtensions.Contains(Path.GetExtension(commandString), StringComparer.OrdinalIgnoreCase))
             {
-                StartProcess("explorer", commandString, elevated);
-                return;
+                if (Directory.Exists(commandString) || File.Exists(commandString) || Uri.IsWellFormedUriString(commandString, UriKind.Absolute))
+                {
+                    StartProcess("explorer", commandString, elevated);
+                    return;
+                }
             }
 
             StartProcess(command[0], ExpandEnvironmentVariables(String.Join(" ", command.Skip(1))), elevated);
@@ -171,10 +173,6 @@ namespace Run
                     info.Verb = "runas";
                 }
                 using Process? process = Process.Start(info);
-                if (process == null)
-                {
-                    throw new Exception("Unable to start process: No process resource started");
-                }
                 Close();
             }
             catch (Exception ex)
@@ -183,9 +181,9 @@ namespace Run
             }
         }
 
-        private string ExpandEnvironmentVariables(string command)
+        private static string ExpandEnvironmentVariables(string command)
         {
-            return this.environmentVariableRegex.Replace(command, match =>
+            return environmentVariableRegex.Replace(command, match =>
             {
                 string variable = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
                 return Environment.GetEnvironmentVariable(variable) ?? match.Value;
